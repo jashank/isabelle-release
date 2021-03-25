@@ -25,11 +25,11 @@ object VSCode_Resources
     pending_input: Set[JFile] = Set.empty,
     pending_output: Set[JFile] = Set.empty)
   {
-    def update_models(changed: Traversable[(JFile, VSCode_Model)]): State =
+    def update_models(changed: Iterable[(JFile, VSCode_Model)]): State =
       copy(
         models = models ++ changed,
-        pending_input = (pending_input /: changed) { case (set, (file, _)) => set + file },
-        pending_output = (pending_output /: changed) { case (set, (file, _)) => set + file })
+        pending_input = changed.foldLeft(pending_input) { case (set, (file, _)) => set + file },
+        pending_output = changed.foldLeft(pending_output) { case (set, (file, _)) => set + file })
 
     def update_caret(new_caret: Option[(JFile, Line.Position)]): State =
       if (caret == new_caret) this
@@ -160,7 +160,7 @@ class VSCode_Resources(
     file: JFile,
     version: Long,
     text: String,
-    range: Option[Line.Range] = None)
+    range: Option[Line.Range] = None): Unit =
   {
     state.change(st =>
       {
@@ -267,7 +267,7 @@ class VSCode_Resources(
 
   /* pending input */
 
-  def flush_input(session: Session, channel: Channel)
+  def flush_input(session: Session, channel: Channel): Unit =
   {
     state.change(st =>
       {
@@ -293,7 +293,7 @@ class VSCode_Resources(
 
   /* pending output */
 
-  def update_output(changed_nodes: Traversable[JFile]): Unit =
+  def update_output(changed_nodes: Iterable[JFile]): Unit =
     state.change(st => st.copy(pending_output = st.pending_output ++ changed_nodes))
 
   def update_output_visible(): Unit =
@@ -357,8 +357,8 @@ class VSCode_Resources(
 
   /* caret handling */
 
-  def update_caret(caret: Option[(JFile, Line.Position)])
-  { state.change(_.update_caret(caret)) }
+  def update_caret(caret: Option[(JFile, Line.Position)]): Unit =
+    state.change(_.update_caret(caret))
 
   def get_caret(): Option[VSCode_Resources.Caret] =
   {

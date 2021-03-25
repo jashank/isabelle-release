@@ -81,7 +81,7 @@ Usage: isabelle vscode_server [OPTIONS]
         // prevent spurious garbage on the main protocol channel
         val orig_out = System.out
         try {
-          System.setOut(new PrintStream(new OutputStream { def write(n: Int) {} }))
+          System.setOut(new PrintStream(new OutputStream { def write(n: Int): Unit = {} }))
           server.start()
         }
         finally { System.setOut(orig_out) }
@@ -136,13 +136,13 @@ class Language_Server(
       val (invoke_input, invoke_load) =
         resources.resolve_dependencies(session, editor, file_watcher)
       if (invoke_input) delay_input.invoke()
-      if (invoke_load) delay_load.invoke
+      if (invoke_load) delay_load.invoke()
     }
 
   private val file_watcher =
     File_Watcher(sync_documents, options.seconds("vscode_load_delay"))
 
-  private def close_document(file: JFile)
+  private def close_document(file: JFile): Unit =
   {
     if (resources.close_model(file)) {
       file_watcher.register_parent(file)
@@ -152,17 +152,17 @@ class Language_Server(
     }
   }
 
-  private def sync_documents(changed: Set[JFile])
+  private def sync_documents(changed: Set[JFile]): Unit =
   {
     resources.sync_models(changed)
     delay_input.invoke()
     delay_output.invoke()
   }
 
-  private def change_document(file: JFile, version: Long, changes: List[LSP.TextDocumentChange])
+  private def change_document(file: JFile, version: Long, changes: List[LSP.TextDocumentChange]): Unit =
   {
     val norm_changes = new mutable.ListBuffer[LSP.TextDocumentChange]
-    @tailrec def norm(chs: List[LSP.TextDocumentChange])
+    @tailrec def norm(chs: List[LSP.TextDocumentChange]): Unit =
     {
       if (chs.nonEmpty) {
         val (full_texts, rest1) = chs.span(_.range.isEmpty)
@@ -187,7 +187,7 @@ class Language_Server(
     Delay.last(options.seconds("vscode_input_delay"), channel.Error_Logger)
     { session.caret_focus.post(Session.Caret_Focus) }
 
-  private def update_caret(caret: Option[(JFile, Line.Position)])
+  private def update_caret(caret: Option[(JFile, Line.Position)]): Unit =
   {
     resources.update_caret(caret)
     delay_caret_update.invoke()
@@ -281,12 +281,12 @@ class Language_Server(
               val range = model.content.doc.range(Text.Range(offset, end_children_offset min file_length))
 
               val selection_range = try{model.content.doc.range(Text.Range(offset, (offset + text.length) min file_length))}
-              catch {case e =>
+              catch {case e : Throwable =>
                 model.content.doc.range(Text.Range(offset, offset + text.length-1))
               }
 
               val label = text.split("\n")(0)
-              val beautified_label = (label /: Symbol.codes) ({case (name, (sym, code)) => name.replaceAllLiterally(sym, code.toChar.toString)})
+              val beautified_label = Symbol.codes.foldLeft(label) {case (name, (sym, code)) => name.replace(sym, code.toChar.toString)}
               val symbol = LSP.DocumentSymbol(beautified_label, None, kind, None, range, selection_range, children)
 
               (symbol :: symbols, end_offset)
@@ -294,7 +294,7 @@ class Language_Server(
         }
 
         val symbols = try { LSP.DocumentSymbols(id, extract_symbols(0, parsed)._1) }
-           catch {case e => LSP.DocumentSymbols(id, Nil) }
+           catch {case e : Throwable => LSP.DocumentSymbols(id, Nil) }
         symbols
 
       case _ => LSP.DocumentSymbols(id, Nil)
@@ -312,7 +312,7 @@ class Language_Server(
       if (preview_panel.flush(channel)) delay_preview.invoke()
     }
 
-  private def request_preview(file: JFile, column: Int)
+  private def request_preview(file: JFile, column: Int): Unit =
   {
     preview_panel.request(file, column)
     delay_preview.invoke()
@@ -327,13 +327,13 @@ class Language_Server(
       if (resources.flush_output(channel)) delay_output.invoke()
     }
 
-  def update_output(changed_nodes: Traversable[JFile])
+  def update_output(changed_nodes: Iterable[JFile]): Unit =
   {
     resources.update_output(changed_nodes)
     delay_output.invoke()
   }
 
-  def update_output_visible()
+  def update_output_visible(): Unit =
   {
     resources.update_output_visible()
     delay_output.invoke()
@@ -353,15 +353,15 @@ class Language_Server(
 
   /* init and exit */
 
-  def init(id: LSP.Id)
+  def init(id: LSP.Id): Unit =
   {
-    def reply_ok(msg: String)
+    def reply_ok(msg: String): Unit =
     {
       channel.write(LSP.Initialize.reply(id, ""))
       channel.writeln(msg)
     }
 
-    def reply_error(msg: String)
+    def reply_error(msg: String): Unit =
     {
       channel.write(LSP.Initialize.reply(id, msg))
       channel.error_message(msg)
@@ -413,14 +413,14 @@ class Language_Server(
 
       try {
         Isabelle_Process(session, options, base_info.sessions_structure, Sessions.store(options),
-          modes = modes, logic = base_info.session).await_startup
+          modes = modes, logic = base_info.session).await_startup()
         reply_ok("Welcome to Isabelle/" + base_info.session + " (" + Distribution.version + ")")
       }
       catch { case ERROR(msg) => reply_error(msg) }
     }
   }
 
-  def shutdown(id: LSP.Id)
+  def shutdown(id: LSP.Id): Unit =
   {
     def reply(err: String): Unit = channel.write(LSP.Shutdown.reply(id, err))
 
@@ -448,7 +448,8 @@ class Language_Server(
     })
   }
 
-  def exit() {
+  def exit(): Unit =
+  {
     log("\n")
     sys.exit(if (session_.value.isDefined) 2 else 0)
   }
@@ -456,7 +457,7 @@ class Language_Server(
 
   /* completion */
 
-  def completion(id: LSP.Id, node_pos: Line.Node_Position)
+  def completion(id: LSP.Id, node_pos: Line.Node_Position): Unit =
   {
     val result =
       (for ((rendering, offset) <- rendering_offset(node_pos))
@@ -467,7 +468,7 @@ class Language_Server(
 
   /* spell-checker dictionary */
 
-  def update_dictionary(include: Boolean, permanent: Boolean)
+  def update_dictionary(include: Boolean, permanent: Boolean): Unit =
   {
     for {
       spell_checker <- resources.spell_checker.get
@@ -481,7 +482,7 @@ class Language_Server(
     }
   }
 
-  def reset_dictionary()
+  def reset_dictionary(): Unit =
   {
     for (spell_checker <- resources.spell_checker.get)
     {
@@ -493,7 +494,7 @@ class Language_Server(
 
   /* hover */
 
-  def hover(id: LSP.Id, node_pos: Line.Node_Position)
+  def hover(id: LSP.Id, node_pos: Line.Node_Position): Unit =
   {
     val result =
       for {
@@ -510,7 +511,7 @@ class Language_Server(
 
   /* goto definition */
 
-  def goto_definition(id: LSP.Id, node_pos: Line.Node_Position)
+  def goto_definition(id: LSP.Id, node_pos: Line.Node_Position): Unit =
   {
     val result =
       (for ((rendering, offset) <- rendering_offset(node_pos))
@@ -521,7 +522,7 @@ class Language_Server(
 
   /* document highlights */
 
-  def document_highlights(id: LSP.Id, node_pos: Line.Node_Position)
+  def document_highlights(id: LSP.Id, node_pos: Line.Node_Position): Unit =
   {
     val result =
       (for ((rendering, offset) <- rendering_offset(node_pos))
@@ -534,7 +535,8 @@ class Language_Server(
   }
 
   /* progress reports */
-  def session_progress() : isabelle.JSON.T = {
+  def session_progress() : isabelle.JSON.T =
+  {
     val snapshot = session.snapshot()
     val nodes = snapshot.version.nodes
 
@@ -563,11 +565,11 @@ class Language_Server(
 
   /* main loop */
 
-  def start()
+  def start(): Unit =
   {
     log("Server started " + Date.now())
 
-    def handle(json: JSON.T)
+    def handle(json: JSON.T): Unit =
     {
       try {
         json match {
@@ -607,7 +609,7 @@ class Language_Server(
       catch { case exn: Throwable => channel.log_error_message(Exn.message(exn)) }
     }
 
-    @tailrec def loop()
+    @tailrec def loop(): Unit =
     {
       channel.read() match {
         case Some(json) =>
@@ -682,7 +684,8 @@ class Language_Server(
       else
         snapshot.find_command_position(id, offset).map(node_pos =>
           new Hyperlink {
-            def follow(unit: Unit) { channel.write(LSP.Caret_Update(node_pos, focus)) }
+            def follow(unit: Unit) : Unit =
+	      channel.write(LSP.Caret_Update(node_pos, focus))
           })
     }
 

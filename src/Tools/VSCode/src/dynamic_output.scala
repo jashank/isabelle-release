@@ -85,12 +85,12 @@ class Dynamic_Output private(server: Language_Server)
 {
   private val state = Synchronized(Dynamic_Output.State(server))
 
-  private def handle_update(restriction: Option[Set[Command]])
-  { state.change(_.handle_update(server.resources, server.channel, restriction)) }
+  private def handle_update(restriction: Option[Set[Command]]): Unit =
+    state.change(_.handle_update(server.resources, server.channel, restriction))
 
 
-  private def force_update(restriction: Option[Set[Command]])
-  { state.change(_.force_update(server.resources, server.channel, restriction)) }
+  private def force_update(restriction: Option[Set[Command]]): Unit =
+    state.change(_.force_update(server.resources, server.channel, restriction))
 
   /* main */
 
@@ -103,21 +103,19 @@ class Dynamic_Output private(server: Language_Server)
         handle_update(None)
     }
 
-  def init()
+  def init(): Unit =
   {
     server.session.commands_changed += main
     server.session.caret_focus += main
     handle_update(None)
   }
 
-  def exit()
+  def exit(): Unit =
   {
     server.session.commands_changed -= main
     server.session.caret_focus -= main
   }
 
-  def force_goal_reprint()
-  {
+  def force_goal_reprint(): Unit =
     force_update(None)
-  }
 }

@@ -15,14 +15,14 @@ object State_Panel
   private val make_id = Counter.make()
   private val instances = Synchronized(Map.empty[Counter.ID, State_Panel])
 
-  def init(server: Language_Server)
+  def init(server: Language_Server): Unit =
   {
     val instance = new State_Panel(server)
     instances.change(_ + (instance.id -> instance))
     instance.init()
   }
 
-  def exit(id: Counter.ID)
+  def exit(id: Counter.ID): Unit =
   {
     instances.change(map =>
       map.get(id) match {
@@ -74,9 +74,10 @@ class State_Panel private(val server: Language_Server)
           output(content)
         })
 
-  def locate() { print_state.locate_query() }
+  def locate(): Unit =
+    print_state.locate_query()
 
-  def update()
+  def update(): Unit =
   {
     server.editor.current_node_snapshot(()) match {
       case Some(snapshot) =>
@@ -93,7 +94,7 @@ class State_Panel private(val server: Language_Server)
 
   private val auto_update_enabled = Synchronized(true)
 
-  def auto_update(set: Option[Boolean] = None)
+  def auto_update(set: Option[Boolean] = None): Unit =
   {
     val enabled =
       auto_update_enabled.guarded_access(a =>
@@ -155,7 +156,7 @@ function invoke_locate()
         auto_update()
     }
 
-  def init()
+  def init(): Unit =
   {
     server.session.commands_changed += main
     server.session.caret_focus += main
@@ -163,7 +164,7 @@ function invoke_locate()
     server.editor.send_dispatcher { auto_update() }
   }
 
-  def exit()
+  def exit(): Unit =
   {
     output_active.change(_ => false)
     server.session.commands_changed -= main
